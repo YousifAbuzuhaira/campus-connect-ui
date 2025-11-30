@@ -173,7 +173,7 @@ export default function Landing() {
               <h4 className="mb-4 font-semibold text-foreground">Company</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li><Link to="/about" className="hover:text-foreground">About Us</Link></li>
-                <li><Link to="/contact" className="hover:text-foreground">Contact</Link></li>
+                {/* <li><Link to="/contact" className="hover:text-foreground">Contact</Link></li> */}
               </ul>
             </div>
           </div>

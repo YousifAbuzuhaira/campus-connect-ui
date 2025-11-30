@@ -1,0 +1,29 @@
+{
+  "timestamp": "2025-11-29T19:00:54.115739",
+  "project_root": "C:\\Users\\yassa\\OneDrive\\Desktop\\AUBH\\4th Year\\Semester 1\\Web Eng\\campus-connect-ui",
+  "backup_type": "full_project",
+  "components": {
+    "source_code": {
+      "file": "source_code_20251129_190054.zip",
+      "status": "success"
+    },
+    "configurations": {
+      "file": "configs_20251129_190054.json",
+      "status": "success"
+    },
+    "database": {
+      "directory": "full_backup_20251129_190054",
+      "status": "success"
+    }
+  },
+  "git_info": {
+    "current_branch": "main",
+    "last_commit": {
+      "hash": "f28467c0fdb6dad845f377b9ba022f964490b48f",
+      "message": "Add core UI scaffolding",
+      "author": "gpt-engineer-app[bot]",
+      "date": "Sun Nov 23 08:26:57 2025 +0000"
+    },
+    "remote_url": "https://github.com/m7amd777/campus-connect-ui.git"
+  }
+}
