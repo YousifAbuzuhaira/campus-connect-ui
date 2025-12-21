@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { buildApiUrl, ENDPOINTS } from "@/lib/api-config";
 import { User } from "@/lib/types";
 
 interface AuthContextType {
@@ -75,7 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       throw new Error("Please use a .edu email address");
     }
     try {
-      const response = await fetch("http://localhost:8000/api/auth/login", {
+      const response = await fetch(buildApiUrl(ENDPOINTS.AUTH.LOGIN), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -117,7 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       console.log("Sending registration data:", requestData);
 
-      const response = await fetch("http://localhost:8000/api/auth/register", {
+      const response = await fetch(buildApiUrl(ENDPOINTS.AUTH.REGISTER), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -157,7 +158,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     if (!token) return;
 
     try {
-      const response = await fetch("http://localhost:8000/api/auth/me", {
+      const response = await fetch(buildApiUrl(ENDPOINTS.AUTH.ME), {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",

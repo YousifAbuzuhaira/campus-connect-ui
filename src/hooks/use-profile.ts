@@ -1,4 +1,5 @@
 import { useAuth } from "@/contexts/AuthContext";
+import { buildApiUrl, ENDPOINTS } from "@/lib/api-config";
 import { UpdateUser, User } from "@/lib/types";
 import { useState, useEffect } from "react";
 
@@ -19,7 +20,7 @@ export const useProfile = () => {
 
       try {
         setError(null);
-        const response = await fetch("http://localhost:8000/api/users/profile", {
+        const response = await fetch(buildApiUrl(ENDPOINTS.USERS.PROFILE), {
           method: "GET",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -57,7 +58,7 @@ export const useProfile = () => {
     setError(null);
 
     try {
-      const response = await fetch("http://localhost:8000/api/users/profile", {
+      const response = await fetch(buildApiUrl(ENDPOINTS.USERS.PROFILE), {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -75,7 +76,7 @@ export const useProfile = () => {
 
       // Refetch user data after update
       const profileResponse = await fetch(
-        "http://localhost:8000/api/users/profile",
+        buildApiUrl(ENDPOINTS.USERS.PROFILE),
         {
           method: "GET",
           headers: {

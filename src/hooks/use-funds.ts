@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { AddFundsRequest, AddFundsResponse } from '@/lib/types';
+import { buildApiUrl } from '@/lib/api-config';
 
 export const useFunds = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -12,7 +13,7 @@ export const useFunds = () => {
       setError(null);
       const token = localStorage.getItem('token');
       
-      const response = await fetch('http://localhost:8000/api/users/balance', {
+      const response = await fetch(buildApiUrl('/api/users/balance'), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -40,7 +41,7 @@ export const useFunds = () => {
       const token = localStorage.getItem('token');
       const requestData: AddFundsRequest = { amount };
 
-      const response = await fetch('http://localhost:8000/api/users/add-funds', {
+      const response = await fetch(buildApiUrl('/api/users/add-funds'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

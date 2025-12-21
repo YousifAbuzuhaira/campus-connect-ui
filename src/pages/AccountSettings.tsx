@@ -47,6 +47,7 @@ import {
 import { useProfile } from "@/hooks/use-profile";
 import { useFunds } from "@/hooks/use-funds";
 import { UpdateUser } from "@/lib/types";
+import { buildApiUrl, ENDPOINTS } from "@/lib/api-config";
 
 export default function AccountSettings() {
   const navigate = useNavigate();
@@ -154,12 +155,15 @@ export default function AccountSettings() {
     setDeleteLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:8000/api/users/account", {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch(
+        buildApiUrl(ENDPOINTS.USERS.DELETE_ACCOUNT),
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
