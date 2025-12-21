@@ -13,13 +13,22 @@ services:
         value: 10000
       - key: HOST
         value: 0.0.0.0
-      # Add your MongoDB connection string and other environment variables here
-      - key: MONGODB_URI
-        generateValue: true  # Render will prompt you to set this
-      - key: JWT_SECRET_KEY
-        generateValue: true  # Render will prompt you to set this
-      - key: JWT_ALGORITHM
+      - key: MONGODB_URL
+        value: mongodb+srv://yabuzuhaira_db_user:asAdc6ouxHqerokw@mycluster.omy5swv.mongodb.net/?retryWrites=true&w=majority&appName=MyCluster
+      - key: DATABASE_NAME
+        value: campusConnect
+      - key: SECRET_KEY
+        value: campus_connect_super_secret_key_2024_development
+      - key: ALGORITHM
         value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 30
+      - key: DEBUG
+        value: False
+      - key: ALLOWED_ORIGINS
+        value: https://campus-connect-ui.onrender.com,https://campus-connect-api.onrender.com
+      - key: ENVIRONMENT
+        value: production
     
   # Frontend Static Site
   - type: web
@@ -31,7 +40,15 @@ services:
       - key: NODE_VERSION
         value: 18
       - key: VITE_API_URL
-        value: https://campus-connect-api.onrender.com  # Update with your actual backend URL
+        value: https://campus-connect-api.onrender.com
+      - key: VITE_APP_NAME
+        value: Campus Connect
+      - key: VITE_APP_VERSION
+        value: 1.0.0
+      - key: VITE_ENABLE_ANALYTICS
+        value: false
+      - key: VITE_ENABLE_DEBUG
+        value: false
 
 databases:
   # You can use Render's PostgreSQL if you want to migrate from MongoDB
