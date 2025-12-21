@@ -12,8 +12,6 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.8
-      - key: PORT
-        value: 10000
       - key: HOST
         value: 0.0.0.0
       - key: MONGODB_URL
@@ -34,14 +32,11 @@ services:
         value: production
     
   # Frontend Static Site
-  - type: web
+  - type: static
     name: campus-connect-ui
-    runtime: node
     buildCommand: "npm install && npm run build"
-    startCommand: "npx serve -s dist -l 3000"
+    staticPublishPath: "dist"
     envVars:
-      - key: NODE_VERSION
-        value: 18
       - key: VITE_API_URL
         value: https://campus-connect-api.onrender.com
       - key: VITE_APP_NAME
