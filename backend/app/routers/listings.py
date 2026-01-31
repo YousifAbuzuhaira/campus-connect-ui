@@ -13,6 +13,10 @@ from app.routers.auth import get_current_user
 
 router = APIRouter()
 
+# Define allowed sort fields for security and validation
+ALLOWED_SORT_FIELDS = ["created_at", "price", "title", "views"]
+ALLOWED_SORT_ORDERS = ["asc", "desc"]
+
 @router.get("/", response_model=ListingResponse)
 async def get_listings(
     page: int = Query(1, ge=1, description="Page number"),
@@ -26,6 +30,18 @@ async def get_listings(
     sort_order: str = Query("desc", description="Sort order (asc/desc)")
 ):
     """Get listings with filtering, searching, and pagination"""
+    # Validate sort_by and sort_order parameters
+    if sort_by not in ALLOWED_SORT_FIELDS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid sort_by field. Allowed fields are: {', '.join(ALLOWED_SORT_FIELDS)}"
+        )
+    if sort_order not in ALLOWED_SORT_ORDERS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid sort_order. Must be 'asc' or 'desc'."
+        )
+
     listings_collection = await get_listings_collection()
     users_collection = await get_users_collection()
     
