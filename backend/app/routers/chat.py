@@ -33,6 +33,7 @@ async def get_user_chats(
     
     # Count total chats
     total = await chats_collection.count_documents(query)
+    total_pages = math.ceil(total / per_page) if total > 0 else 0 # Calculate total pages
     
     # Get chats with pagination
     skip = (page - 1) * per_page
@@ -56,7 +57,10 @@ async def get_user_chats(
     
     return ChatResponse(
         chats=chats,
-        total=total
+        total=total,
+        page=page, # Add page to response
+        per_page=per_page, # Add per_page to response
+        total_pages=total_pages # Add total_pages to response
     )
 
 @router.post("/", response_model=SuccessResponse)
