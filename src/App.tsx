@@ -20,8 +20,29 @@ import About from "./pages/About";
 import Contact from "./pages/Contact";
 import SafetyTips from "./pages/SafetyTips";
 import NotFound from "./pages/NotFound";
+import React from "react";
 
 const queryClient = new QueryClient();
+
+// Define route configuration directly within App.tsx for better organization
+const appRoutes = [
+  { path: "/", component: <Landing />, protected: false, publicOnly: false },
+  { path: "/auth", component: <Auth />, protected: false, publicOnly: true },
+  { path: "/browse", component: <Browse />, protected: true, publicOnly: false },
+  { path: "/listing/:id", component: <ListingDetail />, protected: true, publicOnly: false },
+  { path: "/create", component: <CreateListing />, protected: true, publicOnly: false },
+  { path: "/profile", component: <Profile />, protected: true, publicOnly: false },
+  { path: "/account-settings", component: <AccountSettings />, protected: true, publicOnly: false },
+  { path: "/user/:userId", component: <UserProfile />, protected: true, publicOnly: false },
+  { path: "/messages", component: <Messages />, protected: true, publicOnly: false },
+  { path: "/admin", component: <AdminDashboard />, protected: true, publicOnly: false },
+  { path: "/admin/user/:userId", component: <UserProfile />, protected: true, publicOnly: false },
+  { path: "/seller-guide", component: <SellerGuide />, protected: false, publicOnly: false },
+  { path: "/about", component: <About />, protected: false, publicOnly: false },
+  { path: "/contact", component: <Contact />, protected: false, publicOnly: false },
+  { path: "/safety", component: <SafetyTips />, protected: false, publicOnly: false },
+  { path: "*", component: <NotFound />, protected: false, publicOnly: false }, // Catch-all route
+];
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -31,93 +52,15 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route
-              path="/auth"
-              element={
-                <PublicRoute>
-                  <Auth />
-                </PublicRoute>
+            {appRoutes.map((route, index) => {
+              let element = route.component;
+              if (route.protected) {
+                element = <ProtectedRoute>{route.component}</ProtectedRoute>;
+              } else if (route.publicOnly) {
+                element = <PublicRoute>{route.component}</PublicRoute>;
               }
-            />
-            <Route
-              path="/browse"
-              element={
-                <ProtectedRoute>
-                  <Browse />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/listing/:id"
-              element={
-                <ProtectedRoute>
-                  <ListingDetail />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/create"
-              element={
-                <ProtectedRoute>
-                  <CreateListing />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/profile"
-              element={
-                <ProtectedRoute>
-                  <Profile />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/account-settings"
-              element={
-                <ProtectedRoute>
-                  <AccountSettings />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/user/:userId"
-              element={
-                <ProtectedRoute>
-                  <UserProfile />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/messages"
-              element={
-                <ProtectedRoute>
-                  <Messages />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute>
-                  <AdminDashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/user/:userId"
-              element={
-                <ProtectedRoute>
-                  <UserProfile />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="/seller-guide" element={<SellerGuide />} />
-            <Route path="/about" element={<About />} />
-            <Route path="/contact" element={<Contact />} />
-            <Route path="/safety" element={<SafetyTips />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
+              return <Route key={index} path={route.path} element={element} />;
+            })}
           </Routes>
         </AuthProvider>
       </BrowserRouter>
