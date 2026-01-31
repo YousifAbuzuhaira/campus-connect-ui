@@ -16,7 +16,7 @@ Before running the application, make sure you have the following installed:
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/YousifAbuzuhaira/campus-connect-ui.git
 cd campus-connect-ui
 ```
 
@@ -31,7 +31,7 @@ npm install
 ```bash
 cd backend
 python -m venv venv
-venv\Scripts\activate  # On Windows
+venv\\Scripts\\activate  # On Windows
 # source venv/bin/activate  # On macOS/Linux
 pip install -r requirements.txt
 ```
@@ -260,4 +260,4 @@ To reset the database:
 
 ## License
 
-[Add your license information here]
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
