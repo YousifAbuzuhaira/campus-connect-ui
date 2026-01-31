@@ -16,7 +16,7 @@ import {
 } from "@/hooks/use-chat";
 import { useAuth } from "@/contexts/AuthContext";
 import { Chat } from "@/lib/types";
-import { Search, Send, MessageSquare, User, ArrowLeft } from "lucide-react";
+import { Search, Send, MessageSquare, User, ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 
@@ -24,6 +24,8 @@ export default function Messages() {
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const chatsPerPage = 20; // Matches backend default
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMarkedChatRef = useRef<string | null>(null);
   const navigate = useNavigate();
@@ -46,10 +48,14 @@ export default function Messages() {
   }, [searchParams]);
 
   const {
-    data: chats,
+    data: chatResponse,
     isLoading: chatsLoading,
     error: chatsError,
-  } = useChats();
+  } = useChats(currentPage, chatsPerPage);
+
+  const chats = chatResponse?.chats || [];
+  const totalPages = chatResponse?.total_pages || 0;
+
   const { data: messages, isLoading: messagesLoading } = useChatMessages(
     selectedChatId || ""
   );
@@ -189,7 +195,7 @@ export default function Messages() {
             </div>
           </div>
 
-          <ScrollArea className="h-[calc(100vh-200px)]">
+          <ScrollArea className="h-[calc(100vh-250px)]">
             {filteredChats.length === 0 ? (
               <div className="p-6 text-center">
                 <MessageSquare className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
@@ -280,6 +286,31 @@ export default function Messages() {
               </div>
             )}
           </ScrollArea>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center space-x-2 py-4 border-t border-border bg-muted/30">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Message Area */}
