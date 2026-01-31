@@ -11,7 +11,7 @@ class UserBase(BaseModel):
     phone: Optional[str] = None
     bio: Optional[str] = None
     gender: Optional[str] = None
-    balance: Optional[float] = 100.0
+    balance: Optional[float] = None # Removed default balance
 
 class UserCreate(UserBase):
     password: str
@@ -20,12 +20,9 @@ class UserUpdate(BaseModel):
     email: Optional[str] = None
     username: Optional[str] = None
     full_name: Optional[str] = None
-    firstName: Optional[str] = None
-    lastName: Optional[str] = None
     university_id: Optional[str] = None
     university: Optional[str] = None
     phone: Optional[str] = None
-    phoneNumber: Optional[str] = None
     bio: Optional[str] = None
     gender: Optional[str] = None
 
