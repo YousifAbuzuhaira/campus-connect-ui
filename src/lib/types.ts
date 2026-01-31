@@ -125,6 +125,14 @@ export interface Chat {
   updated_at?: string;
 }
 
+export interface ChatResponse {
+  chats: Chat[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
 export interface Message {
   id?: string;
   chat_id: string;
