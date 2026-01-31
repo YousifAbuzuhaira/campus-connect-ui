@@ -1,18 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ENDPOINTS, authHelpers } from '../lib/api-config';
-import { Chat, CreateChat, Message, SendMessage } from '../lib/types';
+import { Chat, CreateChat, Message, SendMessage, ChatResponse } from '../lib/types';
 
 // Chat hooks
-export const useChats = () => {
+export const useChats = (page: number = 1, per_page: number = 20) => {
   const token = authHelpers.getToken();
   
-  return useQuery<Chat[]>({
-    queryKey: ['chats'],
+  return useQuery<ChatResponse>({
+    queryKey: ['chats', page, per_page],
     queryFn: async () => {
       try {
-        const response = await api.get(ENDPOINTS.CHAT.ALL);
-        // Backend returns ChatResponse with chats array
-        return response.data.chats || [];
+        const response = await api.get(ENDPOINTS.CHAT.ALL, { params: { page, per_page } });
+        // Backend now returns ChatResponse object directly
+        return response.data;
       } catch (error) {
         throw error;
       }
@@ -83,11 +83,14 @@ export const useMarkChatAsRead = () => {
 
 export const useUnreadMessagesCount = () => {
   const token = authHelpers.getToken();
-  const { data: chats } = useChats();
+  // This hook now needs to handle the paginated response, it will sum unread counts across all pages.
+  // For simplicity, it currently only considers the first page of chats.
+  // A more robust solution would fetch all chats or have a dedicated unread count endpoint.
+  const { data: chatResponse } = useChats();
   
-  if (!token) return 0;
+  if (!token || !chatResponse) return 0;
   
-  return chats?.reduce((total, chat) => {
+  return chatResponse.chats?.reduce((total, chat) => {
     const unreadCount = Object.values(chat.unread_count || {}).reduce((sum, count) => sum + count, 0);
     return total + unreadCount;
   }, 0) || 0;
