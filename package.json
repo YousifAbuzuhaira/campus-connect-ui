@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "backend:setup": "cd backend && python -m venv venv && venv\\Scripts\\activate && pip install -r requirements.txt",
     "backend:dev": "cd backend && python run.py",
-    "backend:start": "cd backend && start.bat",
+    "backend:start": "cd backend && venv/bin/python -m gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000",
     "dev:full": "concurrently \"npm run dev\" \"npm run backend:dev\"",
     "setup": "npm install && npm run backend:setup"
   },

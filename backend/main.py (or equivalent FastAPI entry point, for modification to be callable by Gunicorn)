@@ -1,0 +1,53 @@
+import uvicorn
+from fastapi import FastAPI, HTTPException, status
+from fastapi.responses import PlainTextResponse
+
+# Initialize the FastAPI application.
+# This 'app' object will be imported by Gunicorn and served by Uvicorn workers.
+app = FastAPI(
+    title="FastAPI Backend Service",
+    description="A production-ready FastAPI application.",
+    version="1.0.0",
+)
+
+@app.get("/", response_class=PlainTextResponse, summary="Root endpoint")
+async def read_root():
+    """
+    Provides a simple greeting to confirm the service is running.
+    """
+    return "Welcome to the FastAPI Backend Service!"
+
+@app.get("/health", status_code=status.HTTP_200_OK, summary="Health Check")
+async def health_check():
+    """
+    Endpoint for health checks. Returns a 200 OK status if the application is
+    responsive. This is crucial for load balancers and orchestrators (e.g., Kubernetes)
+    to determine the application's availability.
+    """
+    return {"status": "ok"}
+
+# Example of a simple API endpoint
+@app.get("/items/{item_id}", summary="Get a specific item")
+async def read_item(item_id: int):
+    """
+    Retrieves a specific item by its ID.
+    This is a placeholder for actual business logic.
+    """
+    if item_id < 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Item ID cannot be negative."
+        )
+    # In a real application, you would fetch data from a database or another service
+    return {"item_id": item_id, "message": f"This is item {item_id}"}
+
+# This block is for local development convenience only.
+# In a production Gunicorn/Uvicorn setup, Gunicorn will manage the Uvicorn workers
+# and directly import the 'app' object, so this block will not be executed.
+if __name__ == "__main__":
+    # For local development, you can run this file directly using:
+    # python -m backend.main
+    # or
+    # uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+    # The --reload flag is useful for development but should NOT be used in production.
+    uvicorn.run(app, host="0.0.0.0", port=8000)
