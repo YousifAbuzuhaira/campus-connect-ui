@@ -1,0 +1,107 @@
+from datetime import datetime
+from enum import Enum
+from typing import Annotated
+
+from pydantic import BaseModel, Field, EmailStr, BeforeValidator
+from bson import ObjectId
+
+
+# Custom type for PyMongo's ObjectId to Pydantic's str representation.
+# This allows Pydantic to validate ObjectId as a string and handle its serialization.
+# The BeforeValidator ensures that if an ObjectId object is passed, it's converted to a string.
+PyObjectId = Annotated[str, BeforeValidator(str)]
+
+
+class Role(str, Enum):
+    """Defines the possible roles a user can have within the application.
+    This provides a controlled vocabulary for user authorization levels.
+    """
+    USER = "user"
+    ADMIN = "admin"
+
+
+class UserBase(BaseModel):
+    """Base Pydantic model for user data, containing common fields.
+    It includes fields that are generally present for any user representation.
+    """
+    email: EmailStr = Field(..., description="Unique email address of the user.")
+    role: Role = Field(Role.USER, description="Role of the user, defaults to 'user'.")
+
+
+class UserCreate(UserBase):
+    """Pydantic model for creating a new user.
+    Extends UserBase by adding the plaintext password, which will be hashed before storage.
+    """
+    password: str = Field(..., min_length=8, description="User's password (plaintext).")
+
+
+class UserLogin(BaseModel):
+    """Pydantic model for user login credentials.
+    Used to receive email and password from the client for authentication.
+    """
+    email: EmailStr = Field(..., description="User's email address for login.")
+    password: str = Field(..., description="User's password for login.")
+
+
+class UserInDBBase(UserBase):
+    """Pydantic model for user data as stored internally, including the hashed password.
+    This model represents the core user data that would be persisted in the database.
+    """
+    hashed_password: str = Field(..., description="Hashed password of the user.")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Timestamp of user creation.")
+    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Timestamp of last user update.")
+
+
+class UserInDB(UserInDBBase):
+    """Pydantic model representing a complete user document as stored in MongoDB.
+    It includes the MongoDB `_id` field, aliased as `id` for convenience in Python.
+    """
+    id: PyObjectId = Field(alias="_id", default_factory=ObjectId, description="Unique identifier for the user (MongoDB ObjectId).")
+
+    class Config:
+        """Pydantic configuration for UserInDB model.
+        - `populate_by_name`: Allows using field names like 'id' instead of '_id' for population.
+        - `arbitrary_types_allowed`: Enables Pydantic to handle custom types like `ObjectId`.
+        - `json_encoders`: Specifies how to encode `ObjectId` to a string when serializing to JSON.
+        - `json_schema_extra`: Provides example data for OpenAPI documentation.
+        """
+        populate_by_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
+        json_schema_extra = {
+            "example": {
+                "id": "60c72b2f9b1e8b001c8e4d7a",
+                "email": "user@example.com",
+                "role": "user",
+                "hashed_password": "$2b$12$somehashedpasswordstring",
+                "created_at": "2023-10-27T10:00:00.000Z",
+                "updated_at": "2023-10-27T10:00:00.000Z"
+            }
+        }
+
+
+class UserResponse(UserBase):
+    """Pydantic model for user data returned in API responses.
+    This model excludes sensitive information like the hashed password,
+    providing a safe representation of user data for clients.
+    """
+    id: PyObjectId = Field(alias="_id", description="Unique identifier for the user (MongoDB ObjectId).")
+    created_at: datetime = Field(description="Timestamp of user creation.")
+    updated_at: datetime = Field(description="Timestamp of last user update.")
+
+    class Config:
+        """Pydantic configuration for UserResponse model.
+        Similar to UserInDB, but tailored for API output.
+        """
+        populate_by_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
+        json_schema_extra = {
+            "example": {
+                "id": "60c72b2f9b1e8b001c8e4d7a",
+                "email": "user@example.com",
+                "role": "user",
+                "created_at": "2023-10-27T10:00:00.000Z",
+                "updated_at": "2023-10-27T10:00:00.000Z"
+            }
+        }
