@@ -1,0 +1,275 @@
+import os
+import datetime
+from typing import Optional, Dict, Any, List
+
+import jwt
+from passlib.context import CryptContext
+
+# Assuming these modules exist in the project structure
+# User model for database interaction
+from backend.models.user import User
+# Configuration settings (e.g., JWT_SECRET_KEY, ACCESS_TOKEN_EXPIRE_MINUTES)
+from backend.core.config import settings
+
+# --- Configuration ---
+# Initialize CryptContext for password hashing using bcrypt algorithm.
+# bcrypt is a strong, widely used algorithm for password hashing.
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# JWT secret key, algorithm, and token expiration time.
+# The secret key should be a strong, randomly generated string and loaded from environment variables.
+SECRET_KEY = settings.JWT_SECRET_KEY
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES # e.g., 30 minutes
+
+# --- Custom Exceptions ---
+class AuthError(Exception):
+    """Base exception for authentication and authorization errors."""
+    pass
+
+class InvalidCredentialsError(AuthError):
+    """Raised when authentication credentials (username/password) are invalid."""
+    def __init__(self, message="Invalid username or password"):
+        self.message = message
+        super().__init__(self.message)
+
+class UserAlreadyExistsError(AuthError):
+    """Raised when attempting to register a user with an existing username."""
+    def __init__(self, message="User with this username already exists"):
+        self.message = message
+        super().__init__(self.message)
+
+class InvalidTokenError(AuthError):
+    """Raised when a JWT is invalid, expired, or malformed."""
+    def __init__(self, message="Invalid or expired token"):
+        self.message = message
+        super().__init__(self.message)
+
+class UnauthorizedError(AuthError):
+    """Raised when a user is authenticated but not authorized to perform an action."""
+    def __init__(self, message="Not authorized to access this resource"):
+        self.message = message
+        super().__init__(self.message)
+
+# --- Password Hashing Utilities ---
+def hash_password(password: str) -> str:
+    """
+    Hashes a plain-text password using the configured bcrypt context.
+
+    Args:
+        password: The plain-text password string.
+
+    Returns:
+        The hashed password string.
+    """
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    Verifies a plain-text password against a hashed password.
+
+    Args:
+        plain_password: The plain-text password provided by the user.
+        hashed_password: The stored hashed password from the database.
+
+    Returns:
+        True if the passwords match, False otherwise.
+    """
+    return pwd_context.verify(plain_password, hashed_password)
+
+# --- JWT Utilities ---
+def create_access_token(data: Dict[str, Any], expires_delta: Optional[datetime.timedelta] = None) -> str:
+    """
+    Creates a new JWT access token with an embedded payload and expiration.
+
+    Args:
+        data: A dictionary containing the payload for the token (e.g., user_id, username, roles).
+        expires_delta: Optional timedelta for token expiration. If None, uses the default
+                       ACCESS_TOKEN_EXPIRE_MINUTES from settings.
+
+    Returns:
+        The encoded JWT string.
+    """
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.datetime.utcnow() + datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    
+    # Add expiration (exp) and issued at (iat) timestamps to the token payload.
+    to_encode.update({"exp": expire, "iat": datetime.datetime.utcnow()})
+    
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def decode_access_token(token: str) -> Dict[str, Any]:
+    """
+    Decodes and validates a JWT access token.
+
+    Args:
+        token: The JWT string to decode.
+
+    Returns:
+        A dictionary containing the token payload if valid.
+
+    Raises:
+        InvalidTokenError: If the token is invalid, expired, or malformed.
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise InvalidTokenError("Token has expired")
+    except jwt.InvalidTokenError:
+        # This covers various JWT errors like invalid signature, malformed token, etc.
+        raise InvalidTokenError("Invalid token")
+    except Exception as e:
+        # Catch any other unexpected errors during decoding for robustness
+        raise InvalidTokenError(f"Token decoding failed: {e}")
+
+# --- Authentication Service Logic ---
+class AuthService:
+    """
+    Service class for handling user authentication and authorization logic.
+    This class encapsulates operations like user registration, login,
+    and token-based authorization checks.
+    """
+
+    @staticmethod
+    def register_user(username: str, email: str, password: str, roles: Optional[List[str]] = None) -> User:
+        """
+        Registers a new user in the system.
+
+        Args:
+            username: The desired unique username for the new user.
+            email: The user's email address.
+            password: The plain-text password for the new user.
+            roles: Optional list of roles to assign to the new user (e.g., ["user", "admin"]).
+                   Defaults to ["user"] if not provided.
+
+        Returns:
+            The newly created User object from the database.
+
+        Raises:
+            UserAlreadyExistsError: If a user with the given username already exists.
+        """
+        if User.get_by_username(username):
+            raise UserAlreadyExistsError()
+
+        hashed_password = hash_password(password)
+        
+        # Create the user in the database.
+        # Assumes User.create handles database insertion and returns the User object.
+        new_user = User.create(
+            username=username,
+            email=email,
+            hashed_password=hashed_password,
+            roles=roles if roles is not None else ["user"] # Assign default 'user' role
+        )
+        return new_user
+
+    @staticmethod
+    def authenticate_user(username: str, password: str) -> Dict[str, Any]:
+        """
+        Authenticates a user by verifying their username and password.
+        If successful, generates and returns an access token.
+
+        Args:
+            username: The user's username.
+            password: The user's plain-text password.
+
+        Returns:
+            A dictionary containing the user's ID, username, email, roles,
+            the generated access token, and token type.
+
+        Raises:
+            InvalidCredentialsError: If the username or password is incorrect.
+        """
+        user = User.get_by_username(username)
+        
+        # Check if user exists and if the provided password matches the stored hash.
+        if not user or not verify_password(password, user.hashed_password):
+            raise InvalidCredentialsError()
+
+        # Prepare the payload for the access token.
+        # This information will be available in the token and can be used for authorization.
+        access_token_payload = {
+            "user_id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "roles": user.roles
+        }
+        access_token = create_access_token(access_token_payload)
+
+        return {
+            "user_id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "roles": user.roles,
+            "access_token": access_token,
+            "token_type": "bearer"
+        }
+
+    @staticmethod
+    def get_current_user_payload(token: str) -> Dict[str, Any]:
+        """
+        Retrieves the payload from a given access token, representing the current user.
+        This function is typically used by middleware or endpoint decorators to
+        extract user information from an incoming request's authorization header.
+
+        Args:
+            token: The JWT access token string.
+
+        Returns:
+            The decoded token payload (user information).
+
+        Raises:
+            InvalidTokenError: If the token is invalid or expired.
+        """
+        # The decode_access_token function already handles validation and expiration checks.
+        payload = decode_access_token(token)
+        
+        # Optional: For enhanced security, you could fetch the user from the database
+        # using `payload.get("user_id")` here to ensure the user still exists and is active.
+        # If the user is not found, an InvalidTokenError could be raised.
+        # Example:
+        # user_id = payload.get("user_id")
+        # if not User.get_by_id(user_id):
+        #     raise InvalidTokenError("User associated with token no longer exists or is inactive.")
+            
+        return payload
+
+    @staticmethod
+    def authorize_user(token_payload: Dict[str, Any], required_roles: Optional[List[str]] = None) -> bool:
+        """
+        Checks if the user represented by the token payload is authorized to access a resource.
+        This function can be used to implement role-based access control (RBAC).
+
+        Args:
+            token_payload: The decoded JWT payload containing user information (including roles).
+            required_roles: An optional list of roles that the user must possess to be authorized.
+                            If None, only checks if the user is authenticated (i.e., token is valid
+                            and payload exists).
+
+        Returns:
+            True if the user is authorized based on the provided criteria.
+
+        Raises:
+            UnauthorizedError: If the user is not authenticated or does not have the required roles.
+        """
+        if not token_payload:
+            # This case should ideally be caught by get_current_user_payload raising InvalidTokenError,
+            # but serves as a final safeguard.
+            raise UnauthorizedError("Authentication required: Token payload is missing.")
+
+        user_roles = set(token_payload.get("roles", []))
+
+        if required_roles:
+            # Check if the user possesses at least one of the required roles.
+            # An intersection means there's at least one common role.
+            if not user_roles.intersection(set(required_roles)):
+                raise UnauthorizedError("User does not have the required permissions.")
+        
+        # If no specific roles were required, or if the user has the required roles,
+        # then the user is considered authorized.
+        return True
