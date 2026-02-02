@@ -15,12 +15,19 @@ const buttonVariants = cva(
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
+        // New variant for filter tags or chips.
+        // This style is suitable for displaying active filters or selectable options in a compact,
+        // visually distinct manner, enhancing the filtering UI for efficient item discovery.
+        chip: "border border-input bg-background text-foreground hover:bg-accent hover:text-accent-foreground",
       },
       size: {
         default: "h-10 px-4 py-2",
         sm: "h-9 rounded-md px-3",
         lg: "h-11 rounded-md px-8",
         icon: "h-10 w-10",
+        // New size for filter tags or chips.
+        // Provides a smaller, fully rounded button ideal for compact filter UIs.
+        chip: "h-7 rounded-full px-3 text-xs",
       },
     },
     defaultVariants: {
