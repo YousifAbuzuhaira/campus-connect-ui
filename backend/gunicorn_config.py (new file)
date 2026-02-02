@@ -1,0 +1,71 @@
+import os
+
+# Gunicorn configuration for the FastAPI backend application.
+# This file defines how Gunicorn should run the Uvicorn workers
+# for the ASGI application, providing a robust and scalable setup
+# for production environments.
+
+# The number of worker processes for handling requests.
+# A common recommendation is `2 * CPU_CORES + 1`. This allows for
+# efficient utilization of multi-core CPUs and provides resilience
+# against individual worker failures.
+# The value can be overridden by the WEB_CONCURRENCY environment variable.
+num_cpus = os.cpu_count() or 1  # Default to 1 CPU if detection fails
+workers = int(os.environ.get("WEB_CONCURRENCY", num_cpus * 2 + 1))
+
+# The worker class to use. For FastAPI (an ASGI application),
+# Uvicorn workers are required to leverage its asynchronous capabilities.
+worker_class = "uvicorn.workers.UvicornWorker"
+
+# The socket to bind to. This specifies the address and port Gunicorn
+# will listen on. It defaults to 0.0.0.0:8000, making it accessible
+# from outside the container/host, but can be overridden by the PORT
+# environment variable, which is common in containerized and cloud environments.
+bind = f"0.0.0.0:{os.environ.get('PORT', '8000')}"
+
+# The maximum number of requests a worker will process before restarting.
+# This helps to mitigate potential memory leaks over long periods.
+# Set to 0 for no limit. A jitter is added to prevent all workers from
+# restarting at the same time.
+max_requests = int(os.environ.get("MAX_REQUESTS", 1000))
+max_requests_jitter = int(os.environ.get("MAX_REQUESTS_JITTER", 50))
+
+# The timeout for graceful workers restart. Workers that have not responded
+# within this time will be killed and restarted. This prevents hung workers
+# from blocking the application.
+timeout = int(os.environ.get("GUNICORN_TIMEOUT", 120))
+
+# The graceful timeout for workers to finish their current requests
+# before being killed during a restart or shutdown. This ensures
+# ongoing requests are completed without interruption.
+graceful_timeout = int(os.environ.get("GUNICORN_GRACEFUL_TIMEOUT", 30))
+
+# The number of seconds to wait for requests on a Keep-Alive connection.
+# Increasing this can improve performance for clients that maintain persistent
+# connections, reducing connection overhead.
+keepalive = int(os.environ.get("GUNICORN_KEEPALIVE", 5))
+
+# The logging level. Options include 'debug', 'info', 'warning', 'error', 'critical'.
+# 'info' is a good default for production, providing sufficient detail without verbosity.
+loglevel = os.environ.get("GUNICORN_LOGLEVEL", "info")
+
+# The access log file to write to. '-' means stdout, which is standard
+# practice for containerized applications to allow logs to be collected
+# by the container orchestration system (e.g., Docker, Kubernetes).
+accesslog = os.environ.get("GUNICORN_ACCESSLOG", "-")
+
+# The error log file to write to. '-' means stderr, similar to accesslog,
+# for centralized log collection.
+errorlog = os.environ.get("GUNICORN_ERRORLOG", "-")
+
+# Capture stdout/stderr of workers and route them to the error log.
+# This is crucial for ensuring all application-level print statements
+# and standard output/error messages are captured by Gunicorn's logging system.
+capture_output = True
+
+# Preload the application. If True, the application is loaded once in the master process
+# and then forked to workers. This can save memory but might cause issues with
+# some libraries that don't handle forking well (e.g., database connections,
+# global state). For FastAPI, it's generally safer to set this to False by default,
+# allowing each worker to load the app independently, ensuring isolation.
+preload_app = False
