@@ -20,21 +20,35 @@ import { useListings } from "@/hooks/useApi";
 import { LISTING_CATEGORIES, TIME_FILTERS } from "@/lib/constants";
 import { StarRating } from "@/components/ui/star-rating";
 
-const CATEGORIES = LISTING_CATEGORIES;
+// Local constants for filters and sorting options
+const CATEGORIES = LISTING_CATEGORIES; // Renamed for local use, still imported
+const POSTED_TIME_FILTERS = TIME_FILTERS;
+
+const CONDITION_FILTERS = [
+  { label: "New", value: "new" },
+  { label: "Used - Like New", value: "used_like_new" },
+  { label: "Used - Good", value: "used_good" },
+  { label: "Used - Fair", value: "used_fair" },
+];
+
+const SORT_OPTIONS = [
+  { label: "Relevance", value: "relevance", sortBy: "relevance", sortOrder: "desc" },
+  { label: "Newest First", value: "newest", sortBy: "created_at", sortOrder: "desc" },
+  { label: "Price: Low to High", value: "price-low", sortBy: "price", sortOrder: "asc" },
+  { label: "Price: High to Low", value: "price-high", sortBy: "price", sortOrder: "desc" },
+];
 
 export default function Browse() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Filter states
-  const [selectedCategory, setSelectedCategory] = useState(
-    searchParams.get("category") || "All"
-  );
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]); // Changed to array for multi-select
   const [priceRange, setPriceRange] = useState([0, 1000]);
-  const [searchQuery, setSearchQuery] = useState(
-    searchParams.get("search") || ""
-  );
-  const [sortBy, setSortBy] = useState("newest");
-  const [postedFilter, setPostedFilter] = useState("All Time");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState(SORT_OPTIONS[1].value); // Default to "Newest First"
+  const [postedFilter, setPostedFilter] = useState("All Time"); // Now passed to backend
+  const [selectedConditions, setSelectedConditions] = useState<string[]>([]); // New state for conditions
+  const [selectedLocation, setSelectedLocation] = useState(""); // New state for location
   const [currentPage, setCurrentPage] = useState(1);
 
   // Debounced search to avoid too many API calls
@@ -47,17 +61,79 @@ export default function Browse() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Initialize state from URL parameters on mount
+  useEffect(() => {
+    const categoryParam = searchParams.get("category");
+    const searchParam = searchParams.get("search");
+    const sortParam = searchParams.get("sort");
+    const pageParam = searchParams.get("page");
+    const minPriceParam = searchParams.get("min_price");
+    const maxPriceParam = searchParams.get("max_price");
+    const conditionParam = searchParams.get("condition");
+    const locationParam = searchParams.get("location");
+    const postedWithinParam = searchParams.get("posted_within");
+
+    if (categoryParam) {
+      const labels = categoryParam
+        .split(",")
+        .map((val) => CATEGORIES.find((cat) => cat.value === val)?.label)
+        .filter(Boolean) as string[];
+      setSelectedCategories(labels);
+    }
+
+    if (searchParam) {
+      setSearchQuery(searchParam);
+    }
+
+    if (sortParam) {
+      const validSort = SORT_OPTIONS.find(opt => opt.value === sortParam);
+      if (validSort) {
+        setSortBy(validSort.value);
+      }
+    }
+
+    if (pageParam) {
+      setCurrentPage(parseInt(pageParam) || 1);
+    }
+
+    if (minPriceParam || maxPriceParam) {
+      const min = parseInt(minPriceParam || "0");
+      const max = parseInt(maxPriceParam || "1000");
+      setPriceRange([min, max]);
+    }
+
+    if (conditionParam) {
+      const labels = conditionParam
+        .split(",")
+        .map((val) => CONDITION_FILTERS.find((cond) => cond.value === val)?.label)
+        .filter(Boolean) as string[];
+      setSelectedConditions(labels);
+    }
+
+    if (locationParam) {
+      setSelectedLocation(locationParam);
+    }
+
+    if (postedWithinParam) {
+      switch (postedWithinParam) {
+        case "day": setPostedFilter("Today"); break;
+        case "week": setPostedFilter("This Week"); break;
+        case "month": setPostedFilter("This Month"); break;
+        default: setPostedFilter("All Time"); break;
+      }
+    }
+  }, []); // Run only on mount
+
   // Update URL parameters when filters change
   useEffect(() => {
     const newParams = new URLSearchParams();
 
-    if (selectedCategory !== "All") {
-      // Find the backend value for the selected category to store in URL
-      const categoryObj = CATEGORIES.find(
-        (cat) => cat.label === selectedCategory
-      );
-      if (categoryObj && categoryObj.value !== "All") {
-        newParams.set("category", categoryObj.value);
+    if (selectedCategories.length > 0) {
+      const categoryValues = selectedCategories
+        .map((label) => CATEGORIES.find((cat) => cat.label === label)?.value)
+        .filter(Boolean);
+      if (categoryValues.length > 0) {
+        newParams.set("category", categoryValues.join(","));
       }
     }
 
@@ -65,7 +141,8 @@ export default function Browse() {
       newParams.set("search", searchQuery.trim());
     }
 
-    if (sortBy !== "newest") {
+    // Only set sort param if it's not the default "newest"
+    if (sortBy !== SORT_OPTIONS[1].value) {
       newParams.set("sort", sortBy);
     }
 
@@ -73,45 +150,61 @@ export default function Browse() {
       newParams.set("page", currentPage.toString());
     }
 
-    setSearchParams(newParams);
-  }, [selectedCategory, searchQuery, sortBy, currentPage, setSearchParams]);
+    if (priceRange[0] > 0) {
+      newParams.set("min_price", priceRange[0].toString());
+    }
+    if (priceRange[1] < 1000) { // Assuming 1000 is the max value for the slider
+      newParams.set("max_price", priceRange[1].toString());
+    }
 
-  // Initialize state from URL parameters on mount
-  useEffect(() => {
-    const category = searchParams.get("category");
-    const search = searchParams.get("search");
-    const sort = searchParams.get("sort");
-    const page = searchParams.get("page");
-
-    if (category && category !== selectedCategory) {
-      // Find the label for the backend category value
-      const categoryObj = CATEGORIES.find((cat) => cat.value === category);
-      if (categoryObj) {
-        setSelectedCategory(categoryObj.label);
+    if (selectedConditions.length > 0) {
+      const conditionValues = selectedConditions
+        .map((label) => CONDITION_FILTERS.find((cond) => cond.label === label)?.value)
+        .filter(Boolean);
+      if (conditionValues.length > 0) {
+        newParams.set("condition", conditionValues.join(","));
       }
     }
-    if (search && search !== searchQuery) {
-      setSearchQuery(search);
+
+    if (selectedLocation.trim()) {
+      newParams.set("location", selectedLocation.trim());
     }
-    if (sort && sort !== sortBy) {
-      setSortBy(sort);
+
+    if (postedFilter !== "All Time") {
+      switch (postedFilter) {
+        case "Today": newParams.set("posted_within", "day"); break;
+        case "This Week": newParams.set("posted_within", "week"); break;
+        case "This Month": newParams.set("posted_within", "month"); break;
+      }
     }
-    if (page && parseInt(page) !== currentPage) {
-      setCurrentPage(parseInt(page));
-    }
-  }, []); // Only run on mount  // Build API parameters
+
+    setSearchParams(newParams);
+  }, [
+    selectedCategories,
+    searchQuery,
+    sortBy,
+    currentPage,
+    priceRange,
+    selectedConditions,
+    selectedLocation,
+    postedFilter,
+    setSearchParams,
+  ]);
+
+  // Build API parameters for the useListings hook
   const apiParams = useMemo(() => {
     const params: any = {
       page: currentPage,
       per_page: 15,
     };
 
-    if (selectedCategory !== "All") {
-      const categoryObj = CATEGORIES.find(
-        (cat) => cat.label === selectedCategory
-      );
-      if (categoryObj && categoryObj.value !== "All") {
-        params.category = categoryObj.value;
+    if (selectedCategories.length > 0) {
+      // Map selected category labels back to their backend values
+      const categoryValues = selectedCategories
+        .map((label) => CATEGORIES.find((cat) => cat.label === label)?.value)
+        .filter(Boolean); // Remove any undefined values
+      if (categoryValues.length > 0) {
+        params.categories = categoryValues.join(","); // Send as comma-separated string
       }
     }
 
@@ -123,62 +216,79 @@ export default function Browse() {
       params.min_price = priceRange[0];
     }
 
-    if (priceRange[1] < 1000) {
+    if (priceRange[1] < 1000) { // Assuming 1000 is the max price
       params.max_price = priceRange[1];
     }
 
+    if (selectedConditions.length > 0) {
+      // Map selected condition labels back to their backend values
+      const conditionValues = selectedConditions
+        .map((label) => CONDITION_FILTERS.find((cond) => cond.label === label)?.value)
+        .filter(Boolean);
+      if (conditionValues.length > 0) {
+        params.conditions = conditionValues.join(","); // Send as comma-separated string
+      }
+    }
+
+    if (selectedLocation.trim()) {
+      params.location = selectedLocation.trim();
+    }
+
+    // Map postedFilter to backend-friendly values
+    if (postedFilter !== "All Time") {
+      switch (postedFilter) {
+        case "Today":
+          params.posted_within = "day";
+          break;
+        case "This Week":
+          params.posted_within = "week";
+          break;
+        case "This Month":
+          params.posted_within = "month";
+          break;
+      }
+    }
+
+    // Map sortBy to backend sort_by and sort_order parameters
+    const currentSortOption = SORT_OPTIONS.find(opt => opt.value === sortBy);
+    if (currentSortOption) {
+      params.sort_by = currentSortOption.sortBy;
+      params.sort_order = currentSortOption.sortOrder;
+    }
+
     return params;
-  }, [selectedCategory, debouncedSearch, priceRange, currentPage]);
+  }, [
+    currentPage,
+    selectedCategories,
+    debouncedSearch,
+    priceRange,
+    selectedConditions,
+    selectedLocation,
+    postedFilter,
+    sortBy,
+  ]);
 
   // Fetch listings with filters
   const { data: listingsData, isLoading, error } = useListings(apiParams);
 
-  // Sort and filter listings based on client-side filters (for things not handled by backend)
+  // All filtering and sorting is now handled by the backend API.
+  // The filteredListings memo simply returns the data received.
   const filteredListings = useMemo(() => {
-    if (!listingsData) return [];
+    return listingsData || [];
+  }, [listingsData]);
 
-    let filtered = [...listingsData];
-
-    // Apply posted date filter (not handled by backend)
-    if (postedFilter !== "All Time") {
-      const now = new Date();
-      const cutoffDate = new Date();
-
-      switch (postedFilter) {
-        case "Today":
-          cutoffDate.setHours(0, 0, 0, 0);
-          break;
-        case "This Week":
-          cutoffDate.setDate(now.getDate() - 7);
-          break;
-        case "This Month":
-          cutoffDate.setMonth(now.getMonth() - 1);
-          break;
-      }
-
-      filtered = filtered.filter(
-        (listing) => new Date(listing.created_at) >= cutoffDate
-      );
-    }
-
-    // Apply sorting
-    switch (sortBy) {
-      case "newest":
-        filtered.sort(
-          (a, b) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-        break;
-      case "price-low":
-        filtered.sort((a, b) => a.price - b.price);
-        break;
-      case "price-high":
-        filtered.sort((a, b) => b.price - a.price);
-        break;
-    }
-
-    return filtered;
-  }, [listingsData, postedFilter, sortBy]);
+  // Helper function to clear all filters
+  const clearAllFilters = () => {
+    setSelectedCategories([]);
+    setPriceRange([0, 1000]);
+    setSearchQuery("");
+    setPostedFilter("All Time");
+    setSortBy(SORT_OPTIONS[1].value); // Reset to default sort
+    setSelectedConditions([]);
+    setSelectedLocation("");
+    setCurrentPage(1);
+    setSearchParams({}); // Clear all URL parameters
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -200,15 +310,7 @@ export default function Browse() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setSelectedCategory("All");
-                  setPriceRange([0, 1000]);
-                  setSearchQuery("");
-                  setPostedFilter("All Time");
-                  setSortBy("newest");
-                  setCurrentPage(1);
-                  setSearchParams({});
-                }}
+                onClick={clearAllFilters}
               >
                 Clear Filters
               </Button>
@@ -247,22 +349,26 @@ export default function Browse() {
         </div>
 
         {/* Active Filters Display */}
-        {(selectedCategory !== "All" ||
+        {(selectedCategories.length > 0 ||
           searchQuery ||
           postedFilter !== "All Time" ||
           priceRange[0] > 0 ||
-          priceRange[1] < 1000) && (
+          priceRange[1] < 1000 ||
+          selectedConditions.length > 0 ||
+          selectedLocation) && (
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium">Active filters:</span>
-            {selectedCategory !== "All" && (
-              <Badge variant="secondary" className="flex items-center gap-1">
-                {selectedCategory}
+            {selectedCategories.map((categoryLabel) => (
+              <Badge key={categoryLabel} variant="secondary" className="flex items-center gap-1">
+                {categoryLabel}
                 <X
                   className="h-3 w-3 cursor-pointer"
-                  onClick={() => setSelectedCategory("All")}
+                  onClick={() =>
+                    setSelectedCategories(selectedCategories.filter((c) => c !== categoryLabel))
+                  }
                 />
               </Badge>
-            )}
+            ))}
             {searchQuery && (
               <Badge variant="secondary" className="flex items-center gap-1">
                 Search: "{searchQuery}"
@@ -274,7 +380,7 @@ export default function Browse() {
             )}
             {postedFilter !== "All Time" && (
               <Badge variant="secondary" className="flex items-center gap-1">
-                {postedFilter}
+                Posted: {postedFilter}
                 <X
                   className="h-3 w-3 cursor-pointer"
                   onClick={() => setPostedFilter("All Time")}
@@ -283,7 +389,7 @@ export default function Browse() {
             )}
             {(priceRange[0] > 0 || priceRange[1] < 1000) && (
               <Badge variant="secondary" className="flex items-center gap-1">
-                ${priceRange[0]} -{" "}
+                Price: ${priceRange[0]} -{" "}
                 {priceRange[1] === 1000 ? "$1000+" : `$${priceRange[1]}`}
                 <X
                   className="h-3 w-3 cursor-pointer"
@@ -291,6 +397,34 @@ export default function Browse() {
                 />
               </Badge>
             )}
+            {selectedConditions.map((conditionLabel) => (
+              <Badge key={conditionLabel} variant="secondary" className="flex items-center gap-1">
+                Condition: {conditionLabel}
+                <X
+                  className="h-3 w-3 cursor-pointer"
+                  onClick={() =>
+                    setSelectedConditions(selectedConditions.filter((c) => c !== conditionLabel))
+                  }
+                />
+              </Badge>
+            ))}
+            {selectedLocation && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                Location: "{selectedLocation}"
+                <X
+                  className="h-3 w-3 cursor-pointer"
+                  onClick={() => setSelectedLocation("")}
+                />
+              </Badge>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-auto px-2 py-1 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
+              onClick={clearAllFilters}
+            >
+              Clear All
+            </Button>
           </div>
         )}
 
@@ -302,11 +436,11 @@ export default function Browse() {
             <p className="text-muted-foreground">
               {isLoading
                 ? "Loading..."
-                : `${filteredListings.length} items available`}
+                : `${listingsData?.total_count || 0} items available`}
             </p>
           </div>
           <div className="flex items-center gap-4">
-            {/* Mobile Filter Toggle */}
+            {/* Mobile Filter Toggle - Placeholder for future implementation */}
             <Button variant="outline" className="lg:hidden">
               <Filter className="mr-2 h-4 w-4" />
               Filters
@@ -316,9 +450,11 @@ export default function Browse() {
                 <SelectValue placeholder="Sort by" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="newest">Newest First</SelectItem>
-                <SelectItem value="price-low">Price: Low to High</SelectItem>
-                <SelectItem value="price-high">Price: High to Low</SelectItem>
+                {SORT_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -338,19 +474,23 @@ export default function Browse() {
                 <div>
                   <h3 className="mb-3 font-medium">Category</h3>
                   <div className="space-y-2">
-                    {CATEGORIES.map((category) => (
+                    {CATEGORIES.filter(cat => cat.value !== "all").map((category) => ( // Exclude "All" from individual checkboxes
                       <div
                         key={category.value}
                         className="flex items-center gap-2"
                       >
                         <Checkbox
-                          id={category.value}
-                          checked={selectedCategory === category.label}
-                          onCheckedChange={() =>
-                            setSelectedCategory(category.label)
-                          }
+                          id={`category-${category.value}`}
+                          checked={selectedCategories.includes(category.label)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedCategories([...selectedCategories, category.label]);
+                            } else {
+                              setSelectedCategories(selectedCategories.filter(c => c !== category.label));
+                            }
+                          }}
                         />
-                        <Label htmlFor={category.value} className="text-sm">
+                        <Label htmlFor={`category-${category.value}`} className="text-sm">
                           {category.label}
                         </Label>
                       </div>
@@ -406,14 +546,53 @@ export default function Browse() {
                   </div>
                 </div>
 
+                {/* Condition Filter */}
+                <div>
+                  <h3 className="mb-3 font-medium">Condition</h3>
+                  <div className="space-y-2">
+                    {CONDITION_FILTERS.map((condition) => (
+                      <div
+                        key={condition.value}
+                        className="flex items-center gap-2"
+                      >
+                        <Checkbox
+                          id={`condition-${condition.value}`}
+                          checked={selectedConditions.includes(condition.label)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedConditions([...selectedConditions, condition.label]);
+                            } else {
+                              setSelectedConditions(selectedConditions.filter(c => c !== condition.label));
+                            }
+                          }}
+                        />
+                        <Label htmlFor={`condition-${condition.value}`} className="text-sm">
+                          {condition.label}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Location Filter */}
+                <div>
+                  <h3 className="mb-3 font-medium">Location</h3>
+                  <Input
+                    placeholder="e.g., Campus, Dorm, Library"
+                    value={selectedLocation}
+                    onChange={(e) => setSelectedLocation(e.target.value)}
+                    className="h-9"
+                  />
+                </div>
+
                 {/* Posted Date */}
                 <div>
                   <h3 className="mb-3 font-medium">Posted</h3>
                   <div className="space-y-2">
-                    {TIME_FILTERS.map((time) => (
+                    {POSTED_TIME_FILTERS.map((time) => (
                       <div key={time} className="flex items-center gap-2">
                         <Checkbox
-                          id={time}
+                          id={`posted-${time}`}
                           checked={postedFilter === time}
                           onCheckedChange={(checked) => {
                             if (checked) {
@@ -423,7 +602,7 @@ export default function Browse() {
                             }
                           }}
                         />
-                        <Label htmlFor={time} className="text-sm">
+                        <Label htmlFor={`posted-${time}`} className="text-sm">
                           {time}
                         </Label>
                       </div>
@@ -434,15 +613,7 @@ export default function Browse() {
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => {
-                    setSelectedCategory("All");
-                    setPriceRange([0, 1000]);
-                    setSearchQuery("");
-                    setPostedFilter("All Time");
-                    setSortBy("newest");
-                    setCurrentPage(1);
-                    setSearchParams({});
-                  }}
+                  onClick={clearAllFilters}
                 >
                   Clear All Filters
                 </Button>
@@ -474,12 +645,7 @@ export default function Browse() {
                 </p>
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    setSelectedCategory("All");
-                    setPriceRange([0, 1000]);
-                    setSearchQuery("");
-                    setPostedFilter("All Time");
-                  }}
+                  onClick={clearAllFilters}
                 >
                   Clear all filters
                 </Button>
@@ -504,12 +670,15 @@ export default function Browse() {
                           <Badge variant="secondary" className="text-xs">
                             {listing.category}
                           </Badge>
-                          <Badge
-                            variant="outline"
-                            className="border-success/20 bg-success/10 text-success text-xs"
-                          >
-                            Verified
-                          </Badge>
+                          {/* Assuming 'Verified' status is part of listing data */}
+                          {listing.is_verified && (
+                            <Badge
+                              variant="outline"
+                              className="border-success/20 bg-success/10 text-success text-xs"
+                            >
+                              Verified
+                            </Badge>
+                          )}
                         </div>
                         <h3 className="mb-2 line-clamp-2 font-semibold text-card-foreground group-hover:text-primary">
                           {listing.title}
@@ -560,7 +729,7 @@ export default function Browse() {
             )}
 
             {/* Pagination */}
-            {filteredListings.length >= 15 && (
+            {listingsData && listingsData.total_pages > 1 && (
               <div className="mt-8 flex items-center justify-center gap-2">
                 <Button
                   variant="outline"
@@ -573,23 +742,33 @@ export default function Browse() {
                   Previous
                 </Button>
 
-                {/* Page numbers - simplified for now */}
-                {[1, 2, 3].map((page) => (
-                  <Button
-                    key={page}
-                    variant={currentPage === page ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setCurrentPage(page)}
-                  >
-                    {page}
-                  </Button>
-                ))}
+                {/* Dynamically render page numbers around current page */}
+                {Array.from({ length: listingsData.total_pages }, (_, i) => i + 1)
+                  .filter(page =>
+                    page === 1 ||
+                    page === listingsData.total_pages ||
+                    (page >= currentPage - 1 && page <= currentPage + 1)
+                  )
+                  .map((page, index, arr) => (
+                    <span key={page}>
+                      {index > 0 && arr[index - 1] + 1 < page && (
+                        <span className="px-2 text-muted-foreground">...</span>
+                      )}
+                      <Button
+                        variant={currentPage === page ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrentPage(page)}
+                      >
+                        {page}
+                      </Button>
+                    </span>
+                  ))}
 
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setCurrentPage((prev) => prev + 1)}
-                  disabled={filteredListings.length < 15}
+                  disabled={currentPage === listingsData.total_pages}
                 >
                   Next
                 </Button>

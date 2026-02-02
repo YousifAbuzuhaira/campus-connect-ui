@@ -3,6 +3,7 @@ from bson import ObjectId
 from typing import List, Optional
 from datetime import datetime
 import math
+from enum import Enum # New import for Enums
 
 from app.database import get_listings_collection, get_users_collection, get_ratings_collection
 from app.models.listing import ListingModel
@@ -13,6 +14,25 @@ from app.routers.auth import get_current_user
 
 router = APIRouter()
 
+# Define Enums for advanced sorting options
+class ListingSortField(str, Enum):
+    """
+    Defines the available fields for sorting listings.
+    'relevance' is only applicable when a search query is provided.
+    """
+    CREATED_AT = "created_at"
+    PRICE = "price"
+    TITLE = "title"
+    VIEWS = "views"
+    RELEVANCE = "relevance"
+
+class SortOrder(str, Enum):
+    """
+    Defines the available sort orders.
+    """
+    ASC = "asc"
+    DESC = "desc"
+
 @router.get("/", response_model=ListingResponse)
 async def get_listings(
     page: int = Query(1, ge=1, description="Page number"),
@@ -22,26 +42,32 @@ async def get_listings(
     search: Optional[str] = Query(None, description="Search in title and description"),
     min_price: Optional[float] = Query(None, ge=0, description="Minimum price"),
     max_price: Optional[float] = Query(None, ge=0, description="Maximum price"),
-    sort_by: str = Query("created_at", description="Sort field"),
-    sort_order: str = Query("desc", description="Sort order (asc/desc)")
+    # Updated sort_by and sort_order to use Enums for better validation and clarity
+    sort_by: ListingSortField = Query(ListingSortField.CREATED_AT, description="Sort field"),
+    sort_order: SortOrder = Query(SortOrder.DESC, description="Sort order (asc/desc)")
 ):
-    """Get listings with filtering, searching, and pagination"""
+    """
+    Get listings with comprehensive filtering, searching, and pagination.
+    Allows filtering by category, status, price range, and searching by text.
+    Supports sorting by various fields including relevance (when a search term is present).
+    """
     listings_collection = await get_listings_collection()
     users_collection = await get_users_collection()
     
     # Build query
-    query = {"isHidden": False}  # Always exclude hidden products
+    query = {"isHidden": False}  # Always exclude hidden products from general browsing
+    
+    # Filter by listing status
     if status and status == ListingStatus.ACTIVE:
         query["isSold"] = False
     elif status and status == ListingStatus.SOLD:
         query["isSold"] = True
+    
+    # Filter by category
     if category:
-        query["category"] = category
-    if search:
-        query["$or"] = [
-            {"title": {"$regex": search, "$options": "i"}},
-            {"description": {"$regex": search, "$options": "i"}}
-        ]
+        query["category"] = category.value # Use .value for enum to get the string representation
+    
+    # Filter by price range
     if min_price is not None or max_price is not None:
         price_query = {}
         if min_price is not None:
@@ -50,22 +76,57 @@ async def get_listings(
             price_query["$lte"] = max_price
         query["price"] = price_query
     
-    # Count total documents
+    # Handle search query using MongoDB's $text operator for full-text search.
+    # This requires a text index on the 'title' and 'description' fields in MongoDB
+    # for efficient and relevant search results. The existing regex search is replaced
+    # by $text for better relevance scoring and performance.
+    if search:
+        query["$text"] = {"$search": search}
+        # If a search term is provided, and sort_by is not explicitly set to relevance,
+        # it's still a valid search. The text search will apply, but sorting will be
+        # by the specified field unless 'relevance' is chosen.
+    
+    # Count total documents matching the query before pagination
     total = await listings_collection.count_documents(query)
     total_pages = math.ceil(total / per_page)
     
-    # Calculate skip
+    # Calculate the number of documents to skip for pagination
     skip = (page - 1) * per_page
     
-    # Build sort
-    sort_direction = 1 if sort_order == "asc" else -1
-    sort_query = [(sort_by, sort_direction)]
+    # Build sort query
+    sort_direction = 1 if sort_order == SortOrder.ASC else -1
+    sort_query = []
+    projection = {} # Used to include textScore in results if sorting by relevance
+
+    # Handle sorting by relevance or other fields
+    if sort_by == ListingSortField.RELEVANCE:
+        if not search:
+            # If relevance sort is requested without a search term,
+            # default to sorting by creation date to avoid errors or unexpected behavior.
+            # This makes the API more robust for unexpected client requests.
+            sort_query.append((ListingSortField.CREATED_AT.value, -1)) # Default to latest
+        else:
+            # For relevance sorting, MongoDB requires projecting the textScore
+            # and then sorting by it.
+            projection["score"] = {"$meta": "textScore"}
+            sort_query.append(("score", {"$meta": "textScore"}))
+    else:
+        # Standard sorting by a specified field
+        sort_query.append((sort_by.value, sort_direction))
     
-    # Get listings
+    # Get listings from the database
     ratings_collection = await get_ratings_collection()
-    cursor = listings_collection.find(query).sort(sort_query).skip(skip).limit(per_page)
+    
+    # Pass the query, projection (if any), sort criteria, skip, and limit to MongoDB
+    cursor = listings_collection.find(query, projection).sort(sort_query).skip(skip).limit(per_page)
+    
     listings = []
     async for listing in cursor:
+        # If 'score' was added to the document by MongoDB for relevance sorting,
+        # remove it before passing to the helper function or Pydantic model
+        # to ensure it matches the expected Listing schema.
+        if "score" in listing:
+            del listing["score"]
         listings.append(await ListingModel.listing_helper(listing, users_collection, ratings_collection))
     
     return ListingResponse(
