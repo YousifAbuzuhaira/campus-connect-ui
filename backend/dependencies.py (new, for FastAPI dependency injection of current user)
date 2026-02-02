@@ -1,0 +1,200 @@
+import os
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Any
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
+from pydantic import BaseModel
+
+# --- Configuration ---
+# In a real production application, these values MUST be loaded from
+# environment variables or a secure configuration management system.
+# The default 'your-super-secret-key-please-change-me' is for development
+# purposes only and is highly insecure.
+SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-key-please-change-me")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+# OAuth2PasswordBearer is used to extract the token from the Authorization header.
+# The tokenUrl specifies the endpoint where clients can obtain a new token (e.g., login).
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
+
+# --- Pydantic Models ---
+# These models define the structure of data related to tokens and users.
+# In a larger application, these might reside in a separate `models.py` file.
+
+class TokenData(BaseModel):
+    """
+    Represents the data expected within a JWT token's payload.
+    The 'sub' (subject) claim typically holds the user's unique identifier, like email.
+    """
+    email: Optional[str] = None
+
+class User(BaseModel):
+    """
+    Represents a user object, typically fetched from the database.
+    Includes essential user attributes for authentication and authorization.
+    """
+    id: int
+    email: str
+    is_active: bool = True  # Indicates if the user account is active
+    role: str = "user"      # User's role (e.g., "user", "admin") for authorization
+
+    class Config:
+        # This setting is useful if you're using an ORM (like SQLAlchemy)
+        # and want to convert ORM models directly to Pydantic models.
+        orm_mode = True
+
+# --- JWT Utility Functions ---
+
+def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Generates a new JWT access token.
+
+    Args:
+        data: A dictionary containing the payload for the token (e.g., {"sub": user_email}).
+        expires_delta: Optional timedelta for token expiration. If None, uses the
+                       default ACCESS_TOKEN_EXPIRE_MINUTES.
+
+    Returns:
+        A signed JWT string.
+    """
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    
+    # Add the 'exp' (expiration) claim to the token payload.
+    to_encode.update({"exp": expire})
+    
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def verify_token(token: str) -> TokenData:
+    """
+    Verifies a JWT token and returns its payload.
+
+    Args:
+        token: The JWT string to verify.
+
+    Returns:
+        A TokenData object containing the decoded payload.
+
+    Raises:
+        HTTPException: If the token is invalid, expired, or cannot be decoded.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        # Decode the token using the secret key and algorithm.
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        
+        # Extract the 'sub' (subject) claim, which should be the user's email.
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+        
+        token_data = TokenData(email=email)
+    except JWTError:
+        # Catch any JWT-related errors (e.g., expired token, invalid signature).
+        raise credentials_exception
+    return token_data
+
+# --- Database Interaction (Mock for demonstration) ---
+# In a real application, this section would interact with your actual database
+# (e.g., using SQLAlchemy, Tortoise ORM, or a direct database client)
+# to fetch user data. This mock implementation simulates that behavior.
+
+_mock_users_db = {
+    "admin@example.com": User(id=1, email="admin@example.com", is_active=True, role="admin"),
+    "user@example.com": User(id=2, email="user@example.com", is_active=True, role="user"),
+    "inactive@example.com": User(id=3, email="inactive@example.com", is_active=False, role="user"),
+    "another@example.com": User(id=4, email="another@example.com", is_active=True, role="user"),
+}
+
+def get_user_from_db(email: str) -> Optional[User]:
+    """
+    Simulates fetching a user from the database by email.
+    
+    Args:
+        email: The email of the user to retrieve.
+
+    Returns:
+        A User object if found, otherwise None.
+    """
+    return _mock_users_db.get(email)
+
+# --- FastAPI Dependency Functions ---
+# These functions are designed to be used with FastAPI's `Depends` system
+# to inject authenticated user objects into endpoint handlers.
+
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
+    """
+    FastAPI dependency to retrieve the current authenticated user.
+    This function is responsible for:
+    1. Extracting the JWT token from the Authorization header.
+    2. Verifying the token's validity and decoding its payload.
+    3. Fetching the corresponding user from the database.
+
+    Args:
+        token: The JWT token extracted from the Authorization header by OAuth2PasswordBearer.
+
+    Returns:
+        A User object representing the authenticated user.
+
+    Raises:
+        HTTPException: If the token is invalid, user not found, or other authentication issues.
+    """
+    token_data = verify_token(token)
+    user = get_user_from_db(token_data.email)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
+
+async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
+    """
+    FastAPI dependency to retrieve the current authenticated and active user.
+    This builds upon `get_current_user` by adding a check for user account activity.
+
+    Args:
+        current_user: The user object resolved by `get_current_user`.
+
+    Returns:
+        A User object representing the active authenticated user.
+
+    Raises:
+        HTTPException: If the user is inactive.
+    """
+    if not current_user.is_active:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
+    return current_user
+
+async def get_current_admin_user(current_user: User = Depends(get_current_active_user)) -> User:
+    """
+    FastAPI dependency to retrieve the current authenticated, active, and admin user.
+    This builds upon `get_current_active_user` by adding a role-based authorization check.
+
+    Args:
+        current_user: The user object resolved by `get_current_active_user`.
+
+    Returns:
+        A User object representing the admin user.
+
+    Raises:
+        HTTPException: If the user does not have 'admin' role.
+    """
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to perform this action. Admin privileges required."
+        )
+    return current_user

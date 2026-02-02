@@ -1,0 +1,307 @@
+import os
+from datetime import datetime, timedelta
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from pydantic import BaseModel, EmailStr
+
+# --- Configuration ---
+# In a production application, these values MUST be loaded from environment variables
+# or a secure configuration management system. Hardcoding them is for demonstration purposes only.
+SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-key-that-should-be-long-and-random-and-secure")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+# --- Password Hashing ---
+# CryptContext provides a secure way to hash and verify passwords using bcrypt.
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verifies a plain password against a hashed password."""
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password: str) -> str:
+    """Hashes a plain password using bcrypt."""
+    return pwd_context.hash(password)
+
+# --- JWT Token Utilities ---
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Creates a JWT access token.
+    
+    Args:
+        data (dict): The payload to encode into the token (e.g., user ID, roles).
+                     'sub' (subject) is typically used for the user identifier.
+        expires_delta (Optional[timedelta]): Optional timedelta for token expiration.
+                                             If None, ACCESS_TOKEN_EXPIRE_MINUTES is used.
+    
+    Returns:
+        str: The encoded JWT string.
+    """
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    
+    # Add expiration timestamp to the payload
+    to_encode.update({"exp": expire})
+    
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def decode_access_token(token: str) -> dict:
+    """
+    Decodes and validates a JWT access token.
+    
+    Args:
+        token (str): The JWT string to decode.
+    
+    Returns:
+        dict: The decoded payload if the token is valid.
+    
+    Raises:
+        HTTPException: If the token is invalid or expired.
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except JWTError:
+        # Catch any JWT-related errors (e.g., signature mismatch, expired token)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+# --- Pydantic Models ---
+# These models define the structure of data for requests and responses.
+class UserBase(BaseModel):
+    username: str
+    email: Optional[EmailStr] = None
+    full_name: Optional[str] = None
+    disabled: Optional[bool] = False
+    roles: list[str] = ["user"] # Default role for new users
+
+class UserCreate(UserBase):
+    password: str # Password is required for creation
+
+class UserInDB(UserBase):
+    hashed_password: str # Stores the hashed password
+
+class UserOut(UserBase):
+    # This model is used for responses, excluding sensitive fields like hashed_password.
+    pass
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+class TokenData(BaseModel):
+    username: Optional[str] = None
+    roles: list[str] = []
+
+# --- "Database" Simulation ---
+# In a real-world application, this would be replaced by a proper database
+# (e.g., PostgreSQL, MongoDB) integrated with an ORM like SQLAlchemy or an ODM.
+# For this example, an in-memory dictionary simulates user storage.
+fake_users_db: dict[str, UserInDB] = {}
+
+# Pre-populate with sample users for testing and demonstration.
+if not fake_users_db:
+    # Admin user
+    admin_password_hash = get_password_hash("adminpass")
+    fake_users_db["admin"] = UserInDB(
+        username="admin",
+        email="admin@example.com",
+        full_name="Admin User",
+        hashed_password=admin_password_hash,
+        disabled=False,
+        roles=["admin", "user"]
+    )
+    # Regular user
+    user_password_hash = get_password_hash("userpass")
+    fake_users_db["testuser"] = UserInDB(
+        username="testuser",
+        email="test@example.com",
+        full_name="Test User",
+        hashed_password=user_password_hash,
+        disabled=False,
+        roles=["user"]
+    )
+
+def get_user(username: str) -> Optional[UserInDB]:
+    """Retrieves a user from the simulated database by username."""
+    return fake_users_db.get(username)
+
+# --- FastAPI Router and Dependencies ---
+router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+# OAuth2PasswordBearer is a FastAPI utility to extract the token from the Authorization header.
+# The tokenUrl specifies the endpoint where clients can obtain a token.
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
+
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserOut:
+    """
+    FastAPI dependency to get the current authenticated user from the JWT token.
+    It decodes the token, extracts user data, and retrieves the user from the database.
+    
+    Args:
+        token (str): The JWT token extracted from the Authorization header by oauth2_scheme.
+    
+    Returns:
+        UserOut: The authenticated user's public information.
+    
+    Raises:
+        HTTPException: If the token is invalid, expired, or the user is not found.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = decode_access_token(token)
+        username: str = payload.get("sub")
+        roles: list[str] = payload.get("roles", [])
+        if username is None:
+            raise credentials_exception
+        token_data = TokenData(username=username, roles=roles)
+    except JWTError:
+        raise credentials_exception
+    
+    user_in_db = get_user(token_data.username)
+    if user_in_db is None:
+        raise credentials_exception
+    
+    # Return a UserOut model, which excludes the hashed password.
+    return UserOut(**user_in_db.dict())
+
+async def get_current_active_user(current_user: UserOut = Depends(get_current_user)) -> UserOut:
+    """
+    FastAPI dependency to ensure the current authenticated user is active (not disabled).
+    
+    Args:
+        current_user (UserOut): The user object obtained from get_current_user.
+    
+    Returns:
+        UserOut: The active user.
+    
+    Raises:
+        HTTPException: If the user is disabled.
+    """
+    if current_user.disabled:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
+    return current_user
+
+async def get_current_admin_user(current_user: UserOut = Depends(get_current_active_user)) -> UserOut:
+    """
+    FastAPI dependency to ensure the current active authenticated user has the 'admin' role.
+    
+    Args:
+        current_user (UserOut): The active user object obtained from get_current_active_user.
+    
+    Returns:
+        UserOut: The admin user.
+    
+    Raises:
+        HTTPException: If the user does not have the 'admin' role.
+    """
+    if "admin" not in current_user.roles:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
+    return current_user
+
+# --- Authentication Endpoints ---
+
+@router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+async def register_user(user_create: UserCreate) -> UserOut:
+    """
+    Registers a new user in the system.
+    
+    Args:
+        user_create (UserCreate): User registration data including username, email, and password.
+    
+    Returns:
+        UserOut: The newly registered user's public information.
+    
+    Raises:
+        HTTPException: If the username is already registered.
+    """
+    if get_user(user_create.username):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username already registered"
+        )
+    
+    hashed_password = get_password_hash(user_create.password)
+    user_in_db = UserInDB(
+        username=user_create.username,
+        email=user_create.email,
+        full_name=user_create.full_name,
+        hashed_password=hashed_password,
+        disabled=user_create.disabled,
+        roles=user_create.roles # In a real app, roles might be assigned by an admin, not user during registration
+    )
+    fake_users_db[user_in_db.username] = user_in_db
+    return UserOut(**user_in_db.dict())
+
+@router.post("/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()) -> Token:
+    """
+    Authenticates a user and issues a JWT access token.
+    This endpoint expects username and password in `application/x-www-form-urlencoded` format.
+    
+    Args:
+        form_data (OAuth2PasswordRequestForm): Standard form data for OAuth2 token requests.
+    
+    Returns:
+        Token: An object containing the access token and token type.
+    
+    Raises:
+        HTTPException: If authentication fails (incorrect username or password).
+    """
+    user_in_db = get_user(form_data.username)
+    if not user_in_db or not verify_password(form_data.password, user_in_db.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Create token data including the subject ('sub' for username) and user roles.
+    # Roles are included in the token for stateless authorization checks.
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user_in_db.username, "roles": user_in_db.roles},
+        expires_delta=access_token_expires
+    )
+    return Token(access_token=access_token, token_type="bearer")
+
+# --- Protected Endpoints Examples ---
+
+@router.get("/users/me", response_model=UserOut)
+async def read_users_me(current_user: UserOut = Depends(get_current_active_user)) -> UserOut:
+    """
+    Retrieves information about the current authenticated user.
+    Requires an active access token in the Authorization header.
+    """
+    return current_user
+
+@router.get("/admin/data", response_model=dict)
+async def read_admin_data(current_admin_user: UserOut = Depends(get_current_admin_user)) -> dict:
+    """
+    Retrieves data accessible only by users with the 'admin' role.
+    Requires an active access token with 'admin' role.
+    """
+    return {"message": f"Welcome, admin {current_admin_user.username}! This is sensitive admin data."}
+
+@router.get("/public/data", response_model=dict)
+async def read_public_data() -> dict:
+    """
+    Retrieves data accessible by anyone (no authentication required).
+    This endpoint serves as an example of an unprotected route.
+    """
+    return {"message": "This is public data, accessible to all."}
