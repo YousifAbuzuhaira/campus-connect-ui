@@ -1,0 +1,178 @@
+import os
+from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from contextlib import contextmanager
+from typing import Optional
+
+# --- Configuration ---
+# Use environment variable for the database URL for production readiness.
+# Defaults to a SQLite database file for local development if not explicitly set.
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./sql_app.db")
+
+# --- Database Engine and Session Setup ---
+# The engine is the starting point for SQLAlchemy. It's responsible for connecting to the database.
+# For SQLite, 'check_same_thread=False' is necessary to allow multiple threads to interact
+# with the database connection, which is common in web applications.
+engine = create_engine(
+    DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+)
+
+# Base class for our declarative models. All ORM models will inherit from this.
+Base = declarative_base()
+
+# SessionLocal is a factory for new Session objects.
+# Each Session is a "staging zone" for all the objects loaded or associated with it.
+# autocommit=False: Ensures that changes are not automatically committed to the database.
+# autoflush=False: Prevents the session from flushing changes to the database before a query.
+# bind=engine: Connects the session to our database engine.
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# --- Database Models ---
+class User(Base):
+    """
+    SQLAlchemy model representing a user in the database.
+    This model stores essential user information for authentication and authorization.
+    """
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    # Stores user roles as a string. For more complex role management,
+    # this could be a separate table with a many-to-many relationship.
+    # Default role is 'user'.
+    roles = Column(String, default="user", nullable=False)
+
+    def __repr__(self):
+        """
+        Provides a user-friendly representation of the User object.
+        """
+        return f"<User(id={self.id}, username='{self.username}', email='{self.email}', roles='{self.roles}')>"
+
+# --- Database Initialization ---
+def create_db_and_tables():
+    """
+    Creates all defined database tables based on the SQLAlchemy models.
+    This function should be called once during application startup or setup
+    to ensure the database schema is in place.
+    """
+    Base.metadata.create_all(bind=engine)
+
+# --- Database Session Dependency ---
+@contextmanager
+def get_db():
+    """
+    Provides a database session that can be used as a dependency in other parts of the application.
+    This context manager ensures that the database session is properly closed after use,
+    and any uncommitted transactions are rolled back in case of an error.
+    """
+    db = SessionLocal()
+    try:
+        yield db
+        db.commit() # Commit changes if no exceptions occurred within the 'with' block
+    except SQLAlchemyError as e:
+        db.rollback() # Rollback changes if any database error occurs
+        # Re-raise a more general application-level error for consistency
+        raise RuntimeError(f"Database operation failed: {e}") from e
+    finally:
+        db.close() # Always close the session to release resources
+
+# --- User Data Access Operations (DAO) ---
+
+def create_user(db: Session, username: str, email: str, hashed_password: str, roles: str = "user") -> User:
+    """
+    Creates a new user record in the database.
+
+    Args:
+        db: The SQLAlchemy database session.
+        username: The unique username for the new user.
+        email: The unique email address for the new user.
+        hashed_password: The securely hashed password for the new user.
+        roles: A string representing the user's roles (e.g., "user", "admin").
+
+    Returns:
+        The newly created User object.
+
+    Raises:
+        ValueError: If a user with the given username or email already exists (IntegrityError).
+        RuntimeError: For other underlying database-related errors.
+    """
+    try:
+        db_user = User(
+            username=username,
+            email=email,
+            hashed_password=hashed_password,
+            roles=roles
+        )
+        db.add(db_user)
+        # Note: commit is handled by the get_db context manager.
+        # db.commit() is removed here to allow the context manager to control transaction scope.
+        db.flush() # Flush to get the ID for db_user before the transaction commits
+        db.refresh(db_user) # Refresh to load any database-generated values (like ID)
+        return db_user
+    except IntegrityError as e:
+        # Catch specific IntegrityError for unique constraint violations
+        raise ValueError(f"User with username '{username}' or email '{email}' already exists.") from e
+    except SQLAlchemyError as e:
+        # Catch any other SQLAlchemy-related errors
+        raise RuntimeError(f"Failed to create user: {e}") from e
+
+def get_user_by_username(db: Session, username: str) -> Optional[User]:
+    """
+    Retrieves a user from the database by their username.
+
+    Args:
+        db: The SQLAlchemy database session.
+        username: The username to search for.
+
+    Returns:
+        The User object if found, otherwise None.
+
+    Raises:
+        RuntimeError: For underlying database-related errors.
+    """
+    try:
+        return db.query(User).filter(User.username == username).first()
+    except SQLAlchemyError as e:
+        raise RuntimeError(f"Failed to retrieve user by username '{username}': {e}") from e
+
+def get_user_by_email(db: Session, email: str) -> Optional[User]:
+    """
+    Retrieves a user from the database by their email address.
+
+    Args:
+        db: The SQLAlchemy database session.
+        email: The email address to search for.
+
+    Returns:
+        The User object if found, otherwise None.
+
+    Raises:
+        RuntimeError: For underlying database-related errors.
+    """
+    try:
+        return db.query(User).filter(User.email == email).first()
+    except SQLAlchemyError as e:
+        raise RuntimeError(f"Failed to retrieve user by email '{email}': {e}") from e
+
+def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
+    """
+    Retrieves a user from the database by their unique ID.
+
+    Args:
+        db: The SQLAlchemy database session.
+        user_id: The ID of the user to search for.
+
+    Returns:
+        The User object if found, otherwise None.
+
+    Raises:
+        RuntimeError: For underlying database-related errors.
+    """
+    try:
+        return db.query(User).filter(User.id == user_id).first()
+    except SQLAlchemyError as e:
+        raise RuntimeError(f"Failed to retrieve user by ID '{user_id}': {e}") from e
