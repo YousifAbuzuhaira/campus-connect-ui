@@ -23,7 +23,9 @@ export const Navbar = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const unreadCount = useUnreadMessagesCount();
 
-  const isOnBrowsePage = location.pathname === "/browse";
+  // The isOnBrowsePage check is no longer needed for conditionally rendering the search bar.
+  // The search bar will now always be visible, allowing users to search from any page.
+  // const isOnBrowsePage = location.pathname === "/browse";
 
   const handleLogout = async () => {
     await logout();
@@ -32,8 +34,10 @@ export const Navbar = () => {
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
+      // Navigate to the browse page with the search query.
+      // This allows users to initiate a search from any page and land on the browse page with the results.
       navigate(`/browse?search=${encodeURIComponent(searchQuery.trim())}`);
-      setSearchQuery("");
+      setSearchQuery(""); // Clear the search input after submission
     }
   };
 
@@ -45,23 +49,24 @@ export const Navbar = () => {
           <span className="text-xl font-bold text-foreground">UniSell</span>
         </Link>
 
-        {!isOnBrowsePage && (
-          <form
-            onSubmit={handleSearchSubmit}
-            className="flex flex-1 items-center justify-center px-8"
-          >
-            <div className="relative w-full max-w-sm">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search for products..."
-                className="pl-9"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-          </form>
-        )}
+        {/* The search bar is now always visible in the Navbar.
+            This enhances the global search capability, allowing users to search for products
+            from any page and be directed to the browse page with their search results. */}
+        <form
+          onSubmit={handleSearchSubmit}
+          className="flex flex-1 items-center justify-center px-8"
+        >
+          <div className="relative w-full max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search for products..."
+              className="pl-9"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+        </form>
 
         <div className="flex items-center gap-2">
           {user && !user.is_admin && (
