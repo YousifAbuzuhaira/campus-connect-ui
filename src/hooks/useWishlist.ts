@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, ENDPOINTS, authHelpers } from '../lib/api-config';
+import { api, authHelpers } from '../lib/api-config';
 
 export interface WishlistItem {
   id: string;

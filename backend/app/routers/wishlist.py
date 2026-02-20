@@ -4,18 +4,12 @@ from typing import Optional
 from datetime import datetime
 import math
 
-from app.database import get_database, get_listings_collection, get_users_collection, get_ratings_collection
+from app.database import get_database, get_listings_collection, get_users_collection, get_ratings_collection, get_saved_listings_collection
 from app.models.wishlist import WishlistModel
 from app.models.listing import ListingModel
 from app.routers.auth import get_current_user
 
 router = APIRouter()
-
-
-async def get_saved_listings_collection():
-    """Get the saved_listings collection from the database."""
-    database = await get_database()
-    return database.saved_listings
 
 
 @router.post("/{listing_id}")
@@ -225,12 +219,8 @@ async def check_wishlist(
     saved_listings_collection = await get_saved_listings_collection()
     user_id = current_user.id
 
-    existing = await saved_listings_collection.find_one({
-        "userId": ObjectId(user_id),
-        "listingId": ObjectId(listing_id)
-    })
-
-    return {"saved": existing is not None}
+    is_saved = await WishlistModel.is_saved_by_user(saved_listings_collection, user_id, listing_id)
+    return {"saved": is_saved}
 
 
 @router.get("/save-count/{listing_id}")
