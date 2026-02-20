@@ -10,6 +10,7 @@ import { PurchaseDialog } from "@/components/PurchaseDialog";
 import { RatingDialog } from "@/components/RatingDialog";
 import { RatingsList } from "@/components/RatingsList";
 import { StarRating } from "@/components/ui/star-rating";
+import { WishlistButton } from "@/components/WishlistButton";
 import { useListing, usePurchaseListing, useUser } from "@/hooks/useApi";
 import { useCreateChat } from "@/hooks/use-chat";
 import { useAuth } from "@/contexts/AuthContext";
@@ -32,6 +33,7 @@ import {
   UserX,
   User,
   Shield,
+  Heart,
 } from "lucide-react";
 
 export default function ListingDetail() {
@@ -263,6 +265,12 @@ export default function ListingDetail() {
                   {currentImage + 1} / {images.length}
                 </div>
               )}
+              {/* Wishlist Button overlay on image */}
+              <div className="absolute top-4 right-4">
+                <div className="rounded-full bg-background/80 backdrop-blur-sm">
+                  <WishlistButton listingId={id} size="md" />
+                </div>
+              </div>
             </div>
             {/* Thumbnails */}
             {images.length > 1 && (
@@ -339,6 +347,8 @@ export default function ListingDetail() {
                     </Badge>
                   )}
                 </div>
+                {/* Wishlist button in details header */}
+                <WishlistButton listingId={id} size="md" />
               </div>
 
               <h1 className="mb-4 text-2xl font-bold text-foreground">
@@ -366,10 +376,35 @@ export default function ListingDetail() {
                 )}
               </div>
 
+              {/* Save Count - Social Proof */}
+              {listing.save_count != null && listing.save_count > 0 && (
+                <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
+                  <Heart className="h-4 w-4 text-red-400" />
+                  <span>
+                    {listing.save_count}{" "}
+                    {listing.save_count === 1 ? "user" : "users"} saved this
+                  </span>
+                </div>
+              )}
+
               <div className="mb-6">
-                <span className="text-4xl font-bold text-primary">
-                  ${listing.price}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-4xl font-bold text-primary">
+                    ${listing.price}
+                  </span>
+                  {/* Price Drop Indicator */}
+                  {listing.price_history &&
+                    listing.price_history.length > 0 &&
+                    listing.price_history[listing.price_history.length - 1]
+                      .price > listing.price && (
+                      <Badge
+                        variant="outline"
+                        className="border-green-500/20 bg-green-500/10 text-green-600"
+                      >
+                        Price Drop
+                      </Badge>
+                    )}
+                </div>
                 <div className="mt-2">
                   <Badge variant="outline" className="text-sm">
                     {listing.stock} available

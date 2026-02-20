@@ -374,11 +374,31 @@ async def update_listing(
             detail="No data provided for update"
         )
     
+    # Track price history if price is changing
+    price_changed = False
+    old_price = listing.get("price")
+    if "price" in update_data and old_price is not None and update_data["price"] != old_price:
+        price_changed = True
+    
     # Update listing
-    result = await listings_collection.update_one(
-        {"_id": ObjectId(listing_id)},
-        {"$set": update_data}
-    )
+    if price_changed:
+        result = await listings_collection.update_one(
+            {"_id": ObjectId(listing_id)},
+            {
+                "$set": update_data,
+                "$push": {
+                    "price_history": {
+                        "price": old_price,
+                        "changed_at": datetime.utcnow()
+                    }
+                }
+            }
+        )
+    else:
+        result = await listings_collection.update_one(
+            {"_id": ObjectId(listing_id)},
+            {"$set": update_data}
+        )
     
     if result.modified_count:
         return SuccessResponse(

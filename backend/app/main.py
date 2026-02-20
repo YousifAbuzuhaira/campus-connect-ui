@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import os
 
 from app.database import connect_to_mongo, close_mongo_connection
-from app.routers import auth, listings, users, chat, reports, home, ratings, admin
+from app.routers import auth, listings, users, chat, reports, home, ratings, admin, wishlist
 
 # Load environment variables
 load_dotenv()
@@ -50,6 +50,7 @@ app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(reports.router, prefix="/api/reports", tags=["reports"])
 app.include_router(home.router, prefix="/api/home", tags=["home"])
 app.include_router(ratings.router, prefix="/api/ratings", tags=["ratings"])
+app.include_router(wishlist.router, prefix="/api/wishlist", tags=["wishlist"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ import About from "./pages/About";
 import Contact from "./pages/Contact";
 import SafetyTips from "./pages/SafetyTips";
 import NotFound from "./pages/NotFound";
+import { SavedListings } from "./pages/SavedListings";
 import React from "react";
 
 const queryClient = new QueryClient();
@@ -35,6 +36,7 @@ const appRoutes = [
   { path: "/account-settings", component: <AccountSettings />, protected: true, publicOnly: false },
   { path: "/user/:userId", component: <UserProfile />, protected: true, publicOnly: false },
   { path: "/messages", component: <Messages />, protected: true, publicOnly: false },
+  { path: "/saved", component: <SavedListings />, protected: true, publicOnly: false },
   { path: "/admin", component: <AdminDashboard />, protected: true, publicOnly: false },
   { path: "/admin/user/:userId", component: <UserProfile />, protected: true, publicOnly: false },
   { path: "/seller-guide", component: <SellerGuide />, protected: false, publicOnly: false },

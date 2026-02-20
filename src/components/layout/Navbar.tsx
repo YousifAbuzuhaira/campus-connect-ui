@@ -12,9 +12,11 @@ import {
   DollarSign,
   MessageSquare,
   Shield,
+  Heart,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUnreadMessagesCount } from "@/hooks/use-chat";
+import { useWishlistCount } from "@/hooks/useWishlist";
 
 export const Navbar = () => {
   const { user, logout } = useAuth();
@@ -22,6 +24,7 @@ export const Navbar = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const unreadCount = useUnreadMessagesCount();
+  const wishlistCount = useWishlistCount();
 
   const isOnBrowsePage = location.pathname === "/browse";
 
@@ -75,6 +78,18 @@ export const Navbar = () => {
             <Link to="/browse">
               <Button variant="ghost" size="sm">
                 Browse
+              </Button>
+            </Link>
+          )}
+          {user && !user.is_admin && (
+            <Link to="/saved">
+              <Button variant="ghost" size="icon" className="relative">
+                <Heart className="h-5 w-5" />
+                {wishlistCount > 0 && (
+                  <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-primary text-xs text-primary-foreground flex items-center justify-center">
+                    {wishlistCount > 9 ? "9+" : wishlistCount}
+                  </span>
+                )}
               </Button>
             </Link>
           )}

@@ -57,3 +57,7 @@ async def get_featured_products_collection():
 async def get_ratings_collection():
     database = await get_database()
     return database.ratings
+
+async def get_saved_listings_collection():
+    database = await get_database()
+    return database.saved_listings
