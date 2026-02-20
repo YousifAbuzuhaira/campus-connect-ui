@@ -45,7 +45,7 @@ class ListingModel:
         return ListingModel.REVERSE_CATEGORY_MAPPING.get(schema_category, "Other")
 
     @staticmethod
-    async def listing_helper(listing: dict, users_collection=None, ratings_collection=None) -> dict:
+    async def listing_helper(listing: dict, users_collection=None, ratings_collection=None, save_count: Optional[int] = None) -> dict:
         """Transform MongoDB document to API response format"""
         # Get category (with fallback mapping for any legacy data)
         db_category = listing["category"]
@@ -73,7 +73,7 @@ class ListingModel:
             except:
                 pass  # Use defaults if rating calculation fails
         
-        return {
+        result = {
             "id": str(listing["_id"]),
             "seller_id": str(listing["sellerId"]),
             "title": listing["title"],
@@ -96,7 +96,13 @@ class ListingModel:
             "seller_name": seller_name,
             "average_rating": average_rating,
             "total_ratings": total_ratings,
+            "price_history": listing.get("price_history", []),
         }
+
+        if save_count is not None:
+            result["save_count"] = save_count
+
+        return result
     
     @staticmethod
     def create_listing_dict(listing_data: dict, user_id: str, user_email: str = None, user_name: str = None) -> dict:
@@ -125,6 +131,7 @@ class ListingModel:
             "updatedAt": now,
             "seller_email": user_email,
             "seller_name": user_name,
+            "price_history": [],
         }
     
     @staticmethod

@@ -19,6 +19,7 @@ import { Filter, Star, MapPin, Loader2, Search, X } from "lucide-react";
 import { useListings } from "@/hooks/useApi";
 import { LISTING_CATEGORIES, TIME_FILTERS } from "@/lib/constants";
 import { StarRating } from "@/components/ui/star-rating";
+import { WishlistButton } from "@/components/WishlistButton";
 
 const CATEGORIES = LISTING_CATEGORIES;
 
@@ -489,7 +490,7 @@ export default function Browse() {
                 {filteredListings.map((listing) => (
                   <Link key={listing.id} to={`/listing/${listing.id}`}>
                     <Card className="group overflow-hidden transition-all hover:shadow-lg">
-                      <div className="aspect-square overflow-hidden bg-muted">
+                      <div className="relative aspect-square overflow-hidden bg-muted">
                         <img
                           src={
                             listing.images?.[0] ||
@@ -498,6 +499,9 @@ export default function Browse() {
                           alt={listing.title}
                           className="h-full w-full object-cover transition-transform group-hover:scale-105"
                         />
+                        <div className="absolute top-2 right-2 z-10">
+                          <WishlistButton listingId={listing.id} size="sm" />
+                        </div>
                       </div>
                       <div className="p-4">
                         <div className="mb-2 flex items-center gap-2">
