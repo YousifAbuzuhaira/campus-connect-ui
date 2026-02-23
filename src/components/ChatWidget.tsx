@@ -66,7 +66,7 @@ export function ChatWidget({
       <div className="p-3 border-b border-border bg-background/95 backdrop-blur rounded-t-lg flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Avatar className="h-8 w-8">
-            <AvatarImage src="" />
+            <AvatarImage src="" /> {/* TODO: Add actual avatar image source when available */}
             <AvatarFallback className="text-xs">
               {otherUserName?.charAt(0).toUpperCase() || "?"}
             </AvatarFallback>
